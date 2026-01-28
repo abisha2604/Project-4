@@ -1,5 +1,5 @@
 from sqlalchemy.orm import Session
-from models.chat_schema import Chat
+from models.chat_schema import Chat, GeneratedImage
 from database.get_db import get_db
 from groq import Groq
 from fastapi import UploadFile,File
@@ -7,11 +7,14 @@ import os
 import shutil
 import mimetypes
 from fastapi.responses import FileResponse
-
+import requests
+import uuid
+from pypdf import PdfReader
 
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
+API_KEY = "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"
 
 def create_history(db):
     return db.query(Chat).all()
@@ -28,7 +31,7 @@ def create_chat(db:Session,question:str):
 
     messages.append({"role": "user", "content": question})
 
-    client=Groq(api_key=" API KEY ")
+    client=Groq(api_key= API_KEY)
     response=client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         temperature=2,
@@ -50,21 +53,35 @@ def clear_history(db:Session):
     return {"message": "Chat history cleared"}
 
 
-def upload_file(db:Session,question:str,file:UploadFile):
+def upload_file(db: Session,question: str,file: UploadFile):
 
     file_path = os.path.join(UPLOAD_DIR, file.filename)
 
     with open(file_path, "wb") as b:
         shutil.copyfileobj(file.file, b)
 
-    with open(file_path, "r") as f:
-        content = f.read()
+    reader = PdfReader(file_path)
+    content = ""
+    for page in reader.pages:
+        content += page.extract_text() or ""
 
-    client=Groq(api_key=" API KEY")
+
+    client=Groq(api_key= API_KEY)
+    prompt = f"""
+        You are a document-based assistant.
+        Answer only using the information in the DOCUMENT below.
+        DOCUMENT:
+        {content}
+
+        QUESTION:
+        {question}
+        """
+
+
     response=client.chat.completions.create(
         model="llama-3.3-70b-versatile",
         temperature=2,
-        messages=[{"role":"user","content":f"Answer the {question}using{content}"}],
+        messages=[{"role":"user","content":prompt}],
         max_tokens=200
 
     )
@@ -79,14 +96,24 @@ def upload_file(db:Session,question:str,file:UploadFile):
 
     return {"user": question,"bot": response}
 
-    
+def generate_image_service(prompt: str, db: Session) -> bytes:
+
+    HF_API_KEY = "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"
+    HF_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
+
+    headers = {"Authorization": f"Bearer {HF_API_KEY}","Content-Type": "application/json"}
+    response = requests.post(HF_URL,headers=headers,json={"inputs": prompt})
+
+    if response.status_code != 200:
+        raise HTTPException(status_code=400, detail="Image generation failed")
 
 
+    image_bytes = response.content
+    image_entry = GeneratedImage(
+        image_id=str(uuid.uuid4()),
+        prompt=prompt,
+        image_data=image_bytes)
+    db.add(image_entry)
+    db.commit()
 
-    
-
-
-
-
-
-
+    return image_bytes
