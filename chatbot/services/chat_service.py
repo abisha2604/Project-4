@@ -14,7 +14,7 @@ from pypdf import PdfReader
 UPLOAD_DIR = "uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-API_KEY = "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"
+API_KEY = " "
 
 def create_history(db):
     return db.query(Chat).all()
