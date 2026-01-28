@@ -92,14 +92,12 @@ def upload_file(db: Session,question: str,file: UploadFile):
     db.add(q)
     db.commit()
     db.refresh(q)
-
-
     return {"user": question,"bot": response}
 
 def generate_image_service(prompt: str, db: Session) -> bytes:
 
-    HF_API_KEY = " API KEY"
-    HF_URL = " URL "
+    HF_API_KEY = " "
+    HF_URL = "https://router.huggingface.co/hf-inference/models/black-forest-labs/FLUX.1-schnell"
 
     headers = {"Authorization": f"Bearer {HF_API_KEY}","Content-Type": "application/json"}
     response = requests.post(HF_URL,headers=headers,json={"inputs": prompt})
